@@ -7,15 +7,11 @@ from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import json
 
-# 1. CONFIGURACIÓN DE LA BASE DE DATOS (SQLite + SQLAlchemy)
 SQLALCHEMY_DATABASE_URL = "sqlite:///./reservaciones.db"
-# check_same_thread=False es necesario en SQLite para FastAPI
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
-# 2. MODELO DE BASE DE DATOS (Cómo se guarda en el archivo .db)
 class ReservaDB(Base):
     __tablename__ = "reservaciones"
 
@@ -27,16 +23,11 @@ class ReservaDB(Base):
     hora_fin = Column(String)
     asistentes = Column(Integer)
     acomodo = Column(String)
-    # Guardaremos las listas (salas y requerimientos) como texto JSON
     salas = Column(String)
     requerimientos = Column(String)
 
-
-# Crea la base de datos y las tablas si no existen
 Base.metadata.create_all(bind=engine)
 
-
-# 3. MODELO DE PYDANTIC (Cómo recibe los datos desde tu JavaScript)
 class ReservacionInput(BaseModel):
     solicitante: str
     evento: str
@@ -48,8 +39,6 @@ class ReservacionInput(BaseModel):
     salas: List[int]
     requerimientos: List[str]
 
-
-# Inicializamos la aplicación
 app = FastAPI(title="API Gestión de Salas Unison")
 
 app.add_middleware(
@@ -60,8 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Dependencia para conectarse a la base de datos en cada petición
 def get_db():
     db = SessionLocal()
     try:
@@ -69,11 +56,8 @@ def get_db():
     finally:
         db.close()
 
-
-# 4. ENDPOINTS (Rutas)
 @app.post("/api/reservaciones")
 def guardar_reservacion(reserva: ReservacionInput, db: Session = Depends(get_db)):
-    # Convertimos las listas a strings JSON para poder guardarlas en SQLite
     nueva_reserva = ReservaDB(
         solicitante=reserva.solicitante,
         evento=reserva.evento,
@@ -88,7 +72,7 @@ def guardar_reservacion(reserva: ReservacionInput, db: Session = Depends(get_db)
 
     db.add(nueva_reserva)
     db.commit()
-    db.refresh(nueva_reserva)  # Para obtener el ID generado
+    db.refresh(nueva_reserva)
 
     return {"estatus": "exito", "mensaje": "Reservación guardada en DB", "id": nueva_reserva.id}
 
@@ -96,7 +80,6 @@ def guardar_reservacion(reserva: ReservacionInput, db: Session = Depends(get_db)
 @app.get("/api/reservaciones")
 def ver_reservaciones(db: Session = Depends(get_db)):
     reservas = db.query(ReservaDB).all()
-    # Volvemos a convertir el texto JSON a listas para mandarlo al Frontend
     resultado = []
     for r in reservas:
         resultado.append({
@@ -114,6 +97,4 @@ def ver_reservaciones(db: Session = Depends(get_db)):
     return resultado
 
 if __name__ == "__main__":
-    print("Iniciando servidor de Salas Unison...")
-    # 'main:app' significa: en el archivo main.py, busca la variable 'app'
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
