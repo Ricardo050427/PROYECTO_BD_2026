@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -56,8 +56,30 @@ def get_db():
     finally:
         db.close()
 
+
 @app.post("/api/reservaciones")
 def guardar_reservacion(reserva: ReservacionInput, db: Session = Depends(get_db)):
+    reservas_dia = db.query(ReservaDB).filter(ReservaDB.fecha == reserva.fecha).all()
+
+    nueva_inicio = int(reserva.hora_inicio.split(":")[0])
+    nueva_fin = int(reserva.hora_fin.split(":")[0])
+    nuevas_salas = set(reserva.salas)
+
+    for r in reservas_dia:
+        existente_inicio = int(r.hora_inicio.split(":")[0])
+        existente_fin = int(r.hora_fin.split(":")[0])
+        existentes_salas = set(json.loads(r.salas))
+
+        salas_chocan = nuevas_salas.intersection(existentes_salas)
+
+        if salas_chocan:
+            if nueva_inicio < existente_fin and nueva_fin > existente_inicio:
+                salas_str = ", ".join([str(s) for s in salas_chocan])
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Colisión detectada. La(s) sala(s) {salas_str} ya están ocupadas de {r.hora_inicio} a {r.hora_fin} por el evento '{r.evento}'."
+                )
+
     nueva_reserva = ReservaDB(
         solicitante=reserva.solicitante,
         evento=reserva.evento,
